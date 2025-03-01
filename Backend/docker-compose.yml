@@ -12,6 +12,8 @@ services:
       - .env
     depends_on:
       - mongodb
+    command: >
+      sh -c "python manage.py runserver 0.0.0.0:8000"
 
   mongodb:
     image: mongo

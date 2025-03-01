@@ -2,6 +2,7 @@ from pathlib import Path
 import environ
 from mongoengine import connect
 import os
+from datetime import timedelta
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -43,9 +44,27 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "graphene_django",
     "drf_yasg",
+    "rest_framework",
+    "rest_framework_simplejwt",
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "mentorship.authentication.MongoJWTAuthentication",  # Use Custom Authentication
+    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+}
+
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
 GRAPHENE = {"SCHEMA": "mentorship.schema.schema"}
+
+DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
 
 
 MIDDLEWARE = [
