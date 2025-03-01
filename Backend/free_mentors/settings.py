@@ -62,7 +62,11 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-GRAPHENE = {"SCHEMA": "mentorship.schema.schema"}
+GRAPHENE = {
+    "SCHEMA": "mentorship.schema.schema",
+    "GRAPHIQL": True,
+    "PLAYGROUND": True,
+}
 
 DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
 
