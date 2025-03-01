@@ -1,4 +1,5 @@
-from mongoengine import Document, StringField, BooleanField
+from mongoengine import Document, StringField, BooleanField, ReferenceField, DateTimeField
+import datetime
 from django.contrib.auth.hashers import make_password, check_password
 
 
@@ -18,3 +19,11 @@ class User(Document):
 
     def check_password(self, raw_password):
         return check_password(raw_password, self.password)
+
+
+class MentorshipSession(Document):
+    mentee = ReferenceField(User, required=True)  # The user requesting the session
+    mentor = ReferenceField(User, required=True)  # The mentor receiving the request
+    topic = StringField(required=True, max_length=150)
+    date = DateTimeField(default=datetime.datetime.utcnow)
+    status = StringField(choices=["pending", "accepted", "rejected"], default="pending")
