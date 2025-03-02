@@ -1,0 +1,36 @@
+# Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Django migrations
+*/migrations/*
+
+# Environment variables
+.env
+
+# Database
+db.sqlite3
+
+# Static and media files
+/static/
+/media/
+
+# IDEs and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+*.docker/
+docker-compose.override.yml
+
+# Virtual environment directories
+venv/
+env/
+.venv/
+.virtualenv/
+
+# Python Wheels
+*.whl
