@@ -75,7 +75,6 @@ CORS_ALLOW_HEADERS = [
     "session",  # ✅ Allow the 'session' header
     "content-type",
     "authorization",
-    "x-csrftoken",
     "x-requested-with",
 ]
 
