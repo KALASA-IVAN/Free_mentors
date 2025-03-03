@@ -100,6 +100,45 @@ class LoginUser(graphene.Mutation):
         )
 
 
+# class ChangeUserToMentor(graphene.Mutation):
+#     class Arguments:
+#         email = graphene.String(required=True)  # Identify the user by email
+
+#     message = graphene.String()
+
+#     def mutate(self, info, email):
+#         # Extract JWT token from request headers
+#         auth = info.context.headers.get("session")
+#         if not auth:
+#             raise GraphQLError("Authentication credentials were not provided.")
+
+#         # Validate JWT token
+#         jwt_authenticator = JWTAuthentication()
+#         validated_token = jwt_authenticator.get_validated_token(auth)
+
+#         # ✅ Fix: Retrieve user using MongoDB ObjectId
+#         user_id = validated_token.get("user_id")  # This is usually a string
+#         user = User.objects(id=ObjectId(user_id)).first()  # Convert to ObjectId
+
+#         if not user:
+#             raise GraphQLError("Invalid authentication")
+
+#         # Optional: Ensure the requesting user is a mentor/admin
+#         if not user.is_mentor:
+#             raise GraphQLError("You are not authorized to perform this action.")
+
+#         # Fetch the target user to be updated
+#         target_user = User.objects(email=email).first()
+#         if not target_user:
+#             raise GraphQLError("User not found.")
+
+#         # Update user role to mentor
+#         target_user.is_mentor = True
+#         target_user.save()
+
+#         return ChangeUserToMentor(message="User successfully upgraded to mentor.")
+
+
 class ChangeUserToMentor(graphene.Mutation):
     class Arguments:
         email = graphene.String(required=True)  # Identify the user by email
@@ -115,19 +154,14 @@ class ChangeUserToMentor(graphene.Mutation):
         # Validate JWT token
         jwt_authenticator = JWTAuthentication()
         validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
 
-        # ✅ Fix: Retrieve user using MongoDB ObjectId
-        user_id = validated_token.get("user_id")  # This is usually a string
-        user = User.objects(id=ObjectId(user_id)).first()  # Convert to ObjectId
+        # Retrieve the authenticated admin
+        admin = User.objects(id=ObjectId(user_id), is_admin=True).first()
+        if not admin:
+            raise GraphQLError("Only an admin can promote users to mentors.")
 
-        if not user:
-            raise GraphQLError("Invalid authentication")
-
-        # Optional: Ensure the requesting user is a mentor/admin
-        if not user.is_mentor:
-            raise GraphQLError("You are not authorized to perform this action.")
-
-        # Fetch the target user to be updated
+        # Find the user to be promoted
         target_user = User.objects(email=email).first()
         if not target_user:
             raise GraphQLError("User not found.")

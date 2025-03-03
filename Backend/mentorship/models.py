@@ -10,6 +10,7 @@ class User(Document):
     password = StringField(required=True)  # Hashed password
     address = StringField(max_length=100)
     is_mentor = BooleanField(default=False)
+    is_admin = BooleanField(default=False)
     bio = StringField(max_length=150)
     occupation = StringField(max_length=50)
     expertise = StringField(max_length=50)
