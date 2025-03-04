@@ -14,6 +14,7 @@ class UserType(ObjectType):
     email = graphene.String()
     address = graphene.String()
     is_mentor = graphene.Boolean()
+    is_admin = graphene.Boolean()
     bio = graphene.String()
     occupation = graphene.String()
     expertise = graphene.String()
@@ -82,6 +83,7 @@ class LoginUser(graphene.Mutation):
 
     access_token = graphene.String()
     refresh_token = graphene.String()
+    user = graphene.Field(UserType)
     message = graphene.String()
 
     def mutate(self, info, email, password):
@@ -96,6 +98,7 @@ class LoginUser(graphene.Mutation):
         return LoginUser(
             access_token=str(refresh.access_token),
             refresh_token=str(refresh),
+            user=user,
             message="Login successful",
         )
 
