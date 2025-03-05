@@ -1,21 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Box, Avatar, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Stack, CircularProgress, Alert } from '@mui/material';
+import axios from 'axios';
 import SideBar from '../constants/SideBar';
-import { 
-  Box, 
-  Avatar, 
-  Typography, 
-  Button, 
-  Dialog, 
-  DialogTitle, 
-  DialogContent, 
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Stack
-} from '@mui/material';
+import AdminSideBar from '../constants/AdminsSidebar';
 
 interface Mentor {
     id: number;
@@ -36,25 +23,8 @@ interface BookingDetails {
     duration: number;
 }
 
-const mentors: Mentor[] = [
-    { id: 1, firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com', address: 'NY, USA', bio: 'Expert in Full-Stack Development.', occupation: 'Software Engineer', expertise: 'Business and Entrepreneurship', profilePicture: 'https://randomuser.me/api/portraits/women/1.jpg' },
-    { id: 2, firstName: 'Michael', lastName: 'Smith', email: 'michael@example.com', address: 'Toronto, Canada', bio: 'Expert in Cybersecurity.', occupation: 'Cybersecurity Specialist', expertise: 'Technology and Engineering', profilePicture: 'https://randomuser.me/api/portraits/men/2.jpg' },
-    { id: 3, firstName: 'Sophia', lastName: 'Williams', email: 'sophia@example.com', address: 'London, UK', bio: 'Data Scientist focused on AI.', occupation: 'Data Scientist', expertise: 'Business and Entrepreneurship', profilePicture: 'https://randomuser.me/api/portraits/women/3.jpg' },
-    { id: 4, firstName: 'James', lastName: 'Brown', email: 'james@example.com', address: 'Sydney, Australia', bio: 'Cloud Computing Architect.', occupation: 'Cloud Architect', expertise: 'Technology and Engineering', profilePicture: 'https://randomuser.me/api/portraits/men/4.jpg' },
-    { id: 5, firstName: 'Emily', lastName: 'Davis', email: 'emily@example.com', address: 'Los Angeles, USA', bio: 'Product Manager with experience in startups.', occupation: 'Product Manager', expertise: 'Business and Entrepreneurship', profilePicture: 'https://randomuser.me/api/portraits/women/5.jpg' },
-    { id: 6, firstName: 'John', lastName: 'Miller', email: 'john@example.com', address: 'Vancouver, Canada', bio: 'AI Researcher and Developer.', occupation: 'AI Researcher', expertise: 'Technology and Engineering', profilePicture: 'https://randomuser.me/api/portraits/men/6.jpg' },
-    { id: 7, firstName: 'Lily', lastName: 'Wilson', email: 'lily@example.com', address: 'Paris, France', bio: 'Specialist in Data Engineering.', occupation: 'Data Engineer', expertise: 'Technology and Engineering', profilePicture: 'https://randomuser.me/api/portraits/women/7.jpg' }
-];
-
-// Group mentors by expertise
-const groupedMentors = mentors.reduce((acc, mentor) => {
-    acc[mentor.expertise] = acc[mentor.expertise] || [];
-    acc[mentor.expertise].push(mentor);
-    return acc;
-}, {} as Record<string, Mentor[]>);
-
 const MentorsList: React.FC = () => {
-    const [visibleMentors, setVisibleMentors] = useState<number>(6);
+    const [mentors, setMentors] = useState<Mentor[]>([]);
     const [selectedMentor, setSelectedMentor] = useState<Mentor | null>(null);
     const [bookingOpen, setBookingOpen] = useState<boolean>(false);
     const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
@@ -63,13 +33,82 @@ const MentorsList: React.FC = () => {
         reason: '',
         duration: 30
     });
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleSeeMore = () => {
-        setVisibleMentors((prev) => prev + 6);
-    };
+    // Check if user has a token
+    const token = localStorage.getItem('token'); // Or use your preferred token storage method
+
+    // Fetch mentors if the user is logged in and has a valid token
+    useEffect(() => {
+        if (!token) {
+            setError("You need to be logged in to view mentors.");
+            setLoading(false);
+            return;
+        }
+
+        const fetchMentors = async () => {
+            try {
+                const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                    query: `
+                        query {
+                            getAllMentors {
+                                firstName
+                                lastName
+                                email
+                                address
+                                bio
+                                occupation
+                                expertise
+                            }
+                        }
+                    `
+                },{
+                    headers: {
+                        session: token,  
+                    }
+                });
+                console.log(response)
+                setMentors(response.data?.data?.getAllMentors || []);
+            } catch (err) {
+                setError("Failed to load mentors.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchMentors();
+    }, [token]);
 
     const handleOpenModal = (mentor: Mentor) => {
-        setSelectedMentor(mentor);
+        // Fetch mentor details when a mentor is clicked
+        const fetchMentorDetails = async () => {
+            try {
+                const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                    query: `
+                        query {
+                            getMentor(email: "${mentor.email}") {
+                                firstName
+                                lastName
+                                email
+                                bio
+                                occupation
+                                expertise
+                            }
+                        }
+                    `
+                },{
+                    headers: {
+                        session: token,  
+                    }
+                });
+                setSelectedMentor(response.data?.data?.getMentor || null);
+            } catch (err) {
+                setError("Failed to load mentor details.");
+            }
+        };
+
+        fetchMentorDetails();
     };
 
     const handleCloseModal = () => {
@@ -90,53 +129,86 @@ const MentorsList: React.FC = () => {
             [field]: value
         }));
     };
-
-    const handleSubmitBooking = () => {
-        console.log("Booking submitted for mentor:", selectedMentor);
-        console.log("Booking details:", bookingDetails);
-        
-        handleCloseBooking();
-        handleCloseModal();
-        setBookingDetails({
-            date: '',
-            time: '',
-            reason: '',
-            duration: 30
-        });
-        
-        alert("Session booked successfully!");
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+    const handleSubmitBooking = async () => {
+        if (!selectedMentor) return;
+    
+        const { email } = selectedMentor; // Extract mentor email
+        const { date, time, reason, duration } = bookingDetails; // Extract session details
+    
+        try {
+            const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                query: `
+                    mutation {
+                        requestMentorshipSession(mentorEmail: "${email}", topic: "${reason}") {
+                            mentorshipSession {
+                                id
+                                topic
+                                date
+                                status
+                            }
+                            message
+                        }
+                    }
+                `
+            },{
+                headers: {
+                    session: token,  
+                }
+            });
+    
+            // Handle the response from the backend
+            console.log("Mentorship Session Response:", response.data);
+    
+            // Reset the booking form and close the modals
+            handleCloseBooking();
+            handleCloseModal();
+            setBookingDetails({
+                date: '',
+                time: '',
+                reason: '',
+                duration: 30
+            });
+    
+            alert("Session booked successfully!");
+        } catch (err) {
+            console.error("Error submitting booking:", err);
+            setError("Failed to book the session.");
+        }
     };
+    
 
     return (
         <Box display="flex">
-            <SideBar />
+            {isAdmin ? <AdminSideBar /> : <SideBar />}
+            
             <Box flex={1} p={4}>
-                <Typography variant="h4" align="center" gutterBottom sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                <Typography variant="h4" align="center" gutterBottom>
                     Mentors
                 </Typography>
 
-                {Object.entries(groupedMentors).map(([expertise, mentorsInGroup]) => (
-                    <Box key={expertise} mb={4}>
-                        <Typography variant="h6" color="primary" gutterBottom sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                            {expertise}
-                        </Typography>
-                        <Box display="flex" gap={3} flexWrap="wrap" sx={{ ml: "10%", pt: 2 }}>
-                            {mentorsInGroup.slice(0, visibleMentors).map((mentor) => (
-                                <Box key={mentor.id} display="flex" flexDirection="column" alignItems="center" sx={{ cursor: 'pointer' }} onClick={() => handleOpenModal(mentor)}>
-                                    <Avatar src={mentor.profilePicture} sx={{ width: 64, height: 64 }} />
-                                    <Typography>{`${mentor.firstName} ${mentor.lastName}`}</Typography>
-                                </Box>
-                            ))}
-                        </Box>
-                        {mentorsInGroup.length > visibleMentors && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                                <Button variant="contained" color="primary" onClick={handleSeeMore}>
-                                    See more
-                                </Button>
+                {error && <Alert severity="error">{error}</Alert>}
+
+                {loading ? (
+                    <CircularProgress />
+                ) : (
+                    <Stack direction="row" spacing={4} flexWrap="wrap" justifyContent="center">
+                        {mentors.map((mentor) => (
+                            <Box
+                                key={mentor.id}
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="center"
+                                sx={{ cursor: 'pointer' }}
+                                onClick={() => handleOpenModal(mentor)}
+                            >
+                                <Avatar src={mentor.profilePicture} sx={{ width: 64, height: 64 }} />
+                                <Typography>{`${mentor.firstName} ${mentor.lastName}`}</Typography>
                             </Box>
-                        )}
-                    </Box>
-                ))}
+                        ))}
+                    </Stack>
+                )}
+
             </Box>
 
             <Dialog open={!!selectedMentor} onClose={handleCloseModal} fullWidth maxWidth="sm">
@@ -158,7 +230,6 @@ const MentorsList: React.FC = () => {
                 </DialogActions>
             </Dialog>
 
-    
             <Dialog open={bookingOpen} onClose={handleCloseBooking} fullWidth maxWidth="sm">
                 <DialogTitle>Book a Session</DialogTitle>
                 <DialogContent>
@@ -167,7 +238,7 @@ const MentorsList: React.FC = () => {
                             <Typography variant="subtitle1" gutterBottom>
                                 Schedule a session with {selectedMentor.firstName} {selectedMentor.lastName}
                             </Typography>
-                            
+
                             <Stack spacing={3} sx={{ mt: 2 }}>
                                 <TextField
                                     label="Date"
@@ -177,7 +248,7 @@ const MentorsList: React.FC = () => {
                                     InputLabelProps={{ shrink: true }}
                                     fullWidth
                                 />
-                                
+
                                 <TextField
                                     label="Time"
                                     type="time"
@@ -186,7 +257,7 @@ const MentorsList: React.FC = () => {
                                     InputLabelProps={{ shrink: true }}
                                     fullWidth
                                 />
-                                
+
                                 <FormControl fullWidth>
                                     <InputLabel id="duration-label">Session Duration</InputLabel>
                                     <Select
@@ -201,7 +272,7 @@ const MentorsList: React.FC = () => {
                                         <MenuItem value={60}>60 minutes</MenuItem>
                                     </Select>
                                 </FormControl>
-                                
+
                                 <TextField
                                     label="Reason for Session"
                                     multiline
@@ -217,9 +288,9 @@ const MentorsList: React.FC = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseBooking} variant="outlined">Cancel</Button>
-                    <Button 
-                        onClick={handleSubmitBooking} 
-                        variant="contained" 
+                    <Button
+                        onClick={handleSubmitBooking}
+                        variant="contained"
                         color="primary"
                         disabled={!bookingDetails.date || !bookingDetails.time || !bookingDetails.reason}
                     >
