@@ -4,7 +4,7 @@ from graphql import GraphQLError
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, MentorshipSession
+from .models import User, MentorshipSession, Review
 from bson import ObjectId
 
 
@@ -22,11 +22,22 @@ class UserType(ObjectType):
 
 class MentorshipSessionType(graphene.ObjectType):
     id = graphene.String()
-    mentee = graphene.Field(lambda: UserType)
-    mentor = graphene.Field(lambda: UserType)
+    mentor = graphene.Field(UserType)
+    mentee = graphene.Field(UserType)
     topic = graphene.String()
-    date = graphene.String()
+    date = graphene.DateTime()
     status = graphene.String()
+
+
+class ReviewType(graphene.ObjectType):
+    id = graphene.String()
+    mentor = graphene.Field(UserType)
+    mentee = graphene.Field(UserType)
+    session = graphene.Field(MentorshipSessionType)
+    rating = graphene.Int()
+    comment = graphene.String()
+    is_hidden = graphene.Boolean()
+    created_at = graphene.DateTime()
 
 
 class CreateUser(graphene.Mutation):
@@ -101,45 +112,6 @@ class LoginUser(graphene.Mutation):
             user=user,
             message="Login successful",
         )
-
-
-# class ChangeUserToMentor(graphene.Mutation):
-#     class Arguments:
-#         email = graphene.String(required=True)  # Identify the user by email
-
-#     message = graphene.String()
-
-#     def mutate(self, info, email):
-#         # Extract JWT token from request headers
-#         auth = info.context.headers.get("session")
-#         if not auth:
-#             raise GraphQLError("Authentication credentials were not provided.")
-
-#         # Validate JWT token
-#         jwt_authenticator = JWTAuthentication()
-#         validated_token = jwt_authenticator.get_validated_token(auth)
-
-#         # ✅ Fix: Retrieve user using MongoDB ObjectId
-#         user_id = validated_token.get("user_id")  # This is usually a string
-#         user = User.objects(id=ObjectId(user_id)).first()  # Convert to ObjectId
-
-#         if not user:
-#             raise GraphQLError("Invalid authentication")
-
-#         # Optional: Ensure the requesting user is a mentor/admin
-#         if not user.is_mentor:
-#             raise GraphQLError("You are not authorized to perform this action.")
-
-#         # Fetch the target user to be updated
-#         target_user = User.objects(email=email).first()
-#         if not target_user:
-#             raise GraphQLError("User not found.")
-
-#         # Update user role to mentor
-#         target_user.is_mentor = True
-#         target_user.save()
-
-#         return ChangeUserToMentor(message="User successfully upgraded to mentor.")
 
 
 class ChangeUserToMentor(graphene.Mutation):
@@ -261,13 +233,17 @@ class ManageMentorshipSession(graphene.Mutation):
         return ManageMentorshipSession(message=message)
 
 
-# ✅ Fix: Add a query to fetch all mentors
 class Query(graphene.ObjectType):
     get_all_mentors = graphene.List(UserType)
     get_mentor = graphene.Field(UserType, email=graphene.String(required=True))
     all_users = graphene.List(UserType)
     get_pending_sessions = graphene.List(MentorshipSessionType)
+    get_user_mentorship_sessions = graphene.List(MentorshipSessionType)
+    get_mentor_mentorship_sessions = graphene.List(MentorshipSessionType)
     get_all_mentorship_sessions = graphene.List(MentorshipSessionType)
+    get_reviews_for_mentor = graphene.List(
+        ReviewType, mentor_email=graphene.String(required=True)
+    )
 
     def resolve_all_users(self, info):
         return list(User.objects.all())
@@ -300,25 +276,152 @@ class Query(graphene.ObjectType):
         # Fetch pending mentorship sessions for this mentor
         return list(MentorshipSession.objects(mentor=mentor, status="pending"))
 
+    def resolve_get_user_mentorship_sessions(self, info):
+        """Allows mentees to view all their mentorship sessions."""
+        auth = info.context.headers.get("session")
+        if not auth:
+            raise GraphQLError("Authentication credentials were not provided.")
 
-def resolve_get_all_mentorship_sessions(self, info):
-    # Extract JWT token from request headers
-    auth = info.context.headers.get("session")
-    if not auth:
-        raise GraphQLError("Authentication credentials were not provided.")
+        jwt_authenticator = JWTAuthentication()
+        validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
 
-    # Validate JWT token
-    jwt_authenticator = JWTAuthentication()
-    validated_token = jwt_authenticator.get_validated_token(auth)
-    user_id = validated_token.get("user_id")
+        # Retrieve the authenticated user
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise GraphQLError("Invalid authentication.")
 
-    # Retrieve the authenticated mentor
-    mentor = User.objects(id=ObjectId(user_id), is_mentor=True).first()
-    if not mentor:
-        raise GraphQLError("Only mentors can view session requests.")
+        # ✅ Fetch mentorship sessions where the user is the mentee
+        return list(MentorshipSession.objects(mentee=user))
 
-    # Fetch all mentorship sessions for this mentor (pending, accepted, rejected)
-    return list(MentorshipSession.objects(mentor=mentor))
+    def resolve_get_mentor_mentorship_sessions(self, info):
+        """Allows mentors to view all their mentorship sessions."""
+        auth = info.context.headers.get("session")
+        if not auth:
+            raise GraphQLError("Authentication credentials were not provided.")
+
+        jwt_authenticator = JWTAuthentication()
+        validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
+
+        # Retrieve the authenticated mentor
+        mentor = User.objects(id=ObjectId(user_id), is_mentor=True).first()
+        if not mentor:
+            raise GraphQLError("Only mentors can view their mentorship sessions.")
+
+        # ✅ Fetch all mentorship sessions for this mentor (pending, accepted, rejected)
+        return list(MentorshipSession.objects(mentor=mentor))
+
+    def resolve_get_all_mentorship_sessions(self, info):
+        """Allows admins to view all mentorship sessions."""
+        auth = info.context.headers.get("session")
+        if not auth:
+            raise GraphQLError("Authentication credentials were not provided.")
+
+        jwt_authenticator = JWTAuthentication()
+        validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
+
+        # Retrieve the authenticated admin
+        admin = User.objects(id=ObjectId(user_id), is_admin=True).first()
+        if not admin:
+            raise GraphQLError("Only admins can view all mentorship sessions.")
+
+        # ✅ Fetch all mentorship sessions from MongoDB
+        return list(MentorshipSession.objects.all())
+
+    def resolve_get_reviews_for_mentor(self, info, mentor_email):
+        print(f"Fetching reviews for mentor: {mentor_email}")  # ✅ Debugging
+
+        mentor = User.objects(email=mentor_email, is_mentor=True).first()
+        if not mentor:
+            print("❌ Mentor not found")  # ✅ Debugging
+            raise GraphQLError("Mentor not found.")
+
+        reviews = list(Review.objects(mentor=mentor, is_hidden=False))
+
+        print(f"✅ Found {len(reviews)} reviews")  # ✅ Debugging
+        return reviews
+
+
+class AddReview(graphene.Mutation):
+    class Arguments:
+        session_id = graphene.String(required=True)
+        rating = graphene.Int(required=True)
+        comment = graphene.String()
+
+    message = graphene.String()
+
+    def mutate(self, info, session_id, rating, comment):
+        auth = info.context.headers.get("session")
+        if not auth:
+            raise GraphQLError("Authentication credentials were not provided.")
+
+        jwt_authenticator = JWTAuthentication()
+        validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
+
+        # Retrieve the authenticated user
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise GraphQLError("Invalid authentication.")
+
+        # Fetch the session
+        session = MentorshipSession.objects(id=ObjectId(session_id)).first()
+        if not session:
+            raise GraphQLError("Mentorship session not found.")
+
+        if session.mentee.id != user.id:
+            raise GraphQLError("You can only review sessions you participated in.")
+
+        # Check if a review already exists
+        existing_review = Review.objects(session=session).first()
+        if existing_review:
+            raise GraphQLError("You have already reviewed this session.")
+
+        # Create a new review
+        review = Review(
+            mentor=session.mentor,
+            mentee=user,
+            session=session,
+            rating=rating,
+            comment=comment,
+        )
+        review.save()
+
+        return AddReview(message="Review submitted successfully.")
+
+
+class HideReview(graphene.Mutation):
+    class Arguments:
+        review_id = graphene.String(required=True)
+
+    message = graphene.String()
+
+    def mutate(self, info, review_id):
+        auth = info.context.headers.get("session")
+        if not auth:
+            raise GraphQLError("Authentication credentials were not provided.")
+
+        jwt_authenticator = JWTAuthentication()
+        validated_token = jwt_authenticator.get_validated_token(auth)
+        user_id = validated_token.get("user_id")
+
+        # Retrieve the authenticated admin
+        admin = User.objects(id=ObjectId(user_id), is_admin=True).first()
+        if not admin:
+            raise GraphQLError("Only admins can hide reviews.")
+
+        # Fetch the review
+        review = Review.objects(id=ObjectId(review_id)).first()
+        if not review:
+            raise GraphQLError("Review not found.")
+
+        # Hide the review
+        review.is_hidden = True
+        review.save()
+
+        return HideReview(message="Review has been hidden.")
 
 
 class Mutation(ObjectType):
@@ -327,6 +430,8 @@ class Mutation(ObjectType):
     change_user_to_mentor = ChangeUserToMentor.Field()
     request_mentorship_session = RequestMentorshipSession.Field()
     manage_mentorship_session = ManageMentorshipSession.Field()
+    add_review = AddReview.Field()
+    hide_review = HideReview.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
