@@ -6,6 +6,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, MentorshipSession, Review
 from bson import ObjectId
+from datetime import datetime
 
 
 class UserType(ObjectType):
@@ -23,9 +24,9 @@ class UserType(ObjectType):
 class MentorshipSessionType(graphene.ObjectType):
     id = graphene.String()
     mentor = graphene.Field(UserType)
+    date = graphene.DateTime()
     mentee = graphene.Field(UserType)
     topic = graphene.String()
-    date = graphene.DateTime()
     status = graphene.String()
 
 
@@ -152,40 +153,47 @@ class RequestMentorshipSession(graphene.Mutation):
     class Arguments:
         mentor_email = graphene.String(required=True)
         topic = graphene.String(required=True)
+        date = graphene.DateTime()  # ✅ Make date optional
 
     mentorship_session = graphene.Field(MentorshipSessionType)
     message = graphene.String()
 
-    def mutate(self, info, mentor_email, topic):
-        # Extract JWT token from request headers
+    def mutate(self, info, mentor_email, topic, date=None):
         auth = info.context.headers.get("session")
         if not auth:
             raise GraphQLError("Authentication credentials were not provided.")
 
-        # Validate JWT token
         jwt_authenticator = JWTAuthentication()
         validated_token = jwt_authenticator.get_validated_token(auth)
         user_id = validated_token.get("user_id")
 
-        # Retrieve user using MongoDB ObjectId
-        mentee = User.objects(id=user_id).first()
+        # Retrieve authenticated user
+        mentee = User.objects(id=ObjectId(user_id)).first()
         if not mentee:
             raise GraphQLError("Invalid authentication.")
 
-        # Find mentor
+        # Retrieve mentor
         mentor = User.objects(email=mentor_email, is_mentor=True).first()
         if not mentor:
             raise GraphQLError("Mentor not found.")
 
-        # Create mentorship session request
+        # ✅ Fix: Ensure date is always assigned a value
+        if date is None:
+            date = datetime.utcnow()  # Use current timestamp
+
+        # Create mentorship session
         mentorship_session = MentorshipSession(
-            mentee=mentee, mentor=mentor, topic=topic
+            topic=topic,
+            date=date,  # ✅ Now date will always have a value
+            mentor=mentor,
+            mentee=mentee,
+            status="pending",
         )
         mentorship_session.save()
 
         return RequestMentorshipSession(
             mentorship_session=mentorship_session,
-            message="Mentorship session request sent successfully.",
+            message="Mentorship session requested successfully.",
         )
 
 
