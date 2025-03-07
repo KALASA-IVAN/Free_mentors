@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Avatar, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Stack, CircularProgress, Alert } from '@mui/material';
+import {
+    Box, Avatar, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+    TextField, FormControl, InputLabel, Select, MenuItem, Stack, CircularProgress, Alert,
+    Card, CardContent, CardActions, Chip, Grid, Rating
+} from '@mui/material';
 import axios from 'axios';
 import SideBar from '../constants/SideBar';
 import AdminSideBar from '../constants/AdminsSidebar';
@@ -9,11 +13,9 @@ interface Mentor {
     firstName: string;
     lastName: string;
     email: string;
-    address: string;
     bio: string;
     occupation: string;
     expertise: string;
-    profilePicture: string;
 }
 
 interface BookingDetails {
@@ -21,6 +23,16 @@ interface BookingDetails {
     time: string;
     reason: string;
     duration: number;
+}
+
+interface Review {
+    id: number;
+    rating: number;
+    comment: string;
+    mentee: {
+        firstName: string;
+        lastName: string;
+    };
 }
 
 const MentorsList: React.FC = () => {
@@ -35,11 +47,15 @@ const MentorsList: React.FC = () => {
     });
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [reviews, setReviews] = useState<Review[]>([]);
+    const [reviewsOpen, setReviewsOpen] = useState<boolean>(false);
+    const [averageRatings, setAverageRatings] = useState<{ [key: string]: number }>({});
+    const [hideReviewDialogOpen, setHideReviewDialogOpen] = useState<boolean>(false);
+    const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
 
-    // Check if user has a token
-    const token = localStorage.getItem('token'); // Or use your preferred token storage method
+    const token = localStorage.getItem('token');
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
 
-    // Fetch mentors if the user is logged in and has a valid token
     useEffect(() => {
         if (!token) {
             setError("You need to be logged in to view mentors.");
@@ -47,100 +63,80 @@ const MentorsList: React.FC = () => {
             return;
         }
 
-        const fetchMentors = async () => {
+        const fetchMentorsAndAverageRatings = async () => {
             try {
-                const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                const mentorsResponse = await axios.post('http://127.0.0.1:8000/graphql/', {
                     query: `
                         query {
                             getAllMentors {
                                 firstName
                                 lastName
                                 email
-                                address
                                 bio
                                 occupation
                                 expertise
                             }
                         }
                     `
-                },{
-                    headers: {
-                        session: token,  
+                }, { headers: { session: token } });
+
+                const mentorsData = mentorsResponse.data?.data?.getAllMentors || [];
+                setMentors(mentorsData);
+
+                const ratingsData: { [key: string]: number } = {};
+                for (const mentor of mentorsData) {
+                    const reviewsResponse = await axios.post('http://127.0.0.1:8000/graphql/', {
+                        query: `
+                            query {
+                                getReviewsForMentor(mentorEmail: "${mentor.email}") {
+                                    rating
+                                }
+                            }
+                        `
+                    }, { headers: { session: token } });
+
+                    const mentorReviews = reviewsResponse.data?.data?.getReviewsForMentor || [];
+                    if (mentorReviews.length > 0) {
+                        const totalRating = mentorReviews.reduce((sum: number, review: Review) => sum + review.rating, 0);
+                        ratingsData[mentor.email] = totalRating / mentorReviews.length;
+                    } else {
+                        ratingsData[mentor.email] = 0;
                     }
-                });
-                console.log(response)
-                setMentors(response.data?.data?.getAllMentors || []);
+                }
+
+                setAverageRatings(ratingsData);
             } catch (err) {
-                setError("Failed to load mentors.");
+                setError("Failed to load mentors or average ratings.");
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchMentors();
+        fetchMentorsAndAverageRatings();
     }, [token]);
 
-    const handleOpenModal = (mentor: Mentor) => {
-        // Fetch mentor details when a mentor is clicked
-        const fetchMentorDetails = async () => {
-            try {
-                const response = await axios.post('http://127.0.0.1:8000/graphql/', {
-                    query: `
-                        query {
-                            getMentor(email: "${mentor.email}") {
-                                firstName
-                                lastName
-                                email
-                                bio
-                                occupation
-                                expertise
-                            }
-                        }
-                    `
-                },{
-                    headers: {
-                        session: token,  
-                    }
-                });
-                setSelectedMentor(response.data?.data?.getMentor || null);
-            } catch (err) {
-                setError("Failed to load mentor details.");
-            }
-        };
-
-        fetchMentorDetails();
-    };
-
-    const handleCloseModal = () => {
-        setSelectedMentor(null);
-    };
-
-    const handleOpenBooking = () => {
+    const handleOpenBooking = (mentor: Mentor) => {
+        setSelectedMentor(mentor);
         setBookingOpen(true);
     };
 
     const handleCloseBooking = () => {
         setBookingOpen(false);
+        setSelectedMentor(null);
+        setBookingDetails({ date: '', time: '', reason: '', duration: 30 });
     };
 
     const handleBookingChange = (field: keyof BookingDetails, value: any) => {
-        setBookingDetails(prev => ({
-            ...prev,
-            [field]: value
-        }));
+        setBookingDetails(prev => ({ ...prev, [field]: value }));
     };
-    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+
     const handleSubmitBooking = async () => {
         if (!selectedMentor) return;
-    
-        const { email } = selectedMentor; // Extract mentor email
-        const { date, time, reason, duration } = bookingDetails; // Extract session details
-    
         try {
             const response = await axios.post('http://127.0.0.1:8000/graphql/', {
                 query: `
                     mutation {
-                        requestMentorshipSession(mentorEmail: "${email}", topic: "${reason}") {
+                        requestMentorshipSession(mentorEmail: "${selectedMentor.email}", topic: "${bookingDetails.reason}") {
                             mentorshipSession {
                                 id
                                 topic
@@ -151,37 +147,89 @@ const MentorsList: React.FC = () => {
                         }
                     }
                 `
-            },{
-                headers: {
-                    session: token,  
-                }
-            });
-    
-            // Handle the response from the backend
+            }, { headers: { session: token } });
+
             console.log("Mentorship Session Response:", response.data);
-    
-            // Reset the booking form and close the modals
             handleCloseBooking();
-            handleCloseModal();
-            setBookingDetails({
-                date: '',
-                time: '',
-                reason: '',
-                duration: 30
-            });
-    
             alert("Session booked successfully!");
         } catch (err) {
             console.error("Error submitting booking:", err);
             setError("Failed to book the session.");
         }
     };
-    
+
+    const fetchReviews = async (mentorEmail: string) => {
+        try {
+            const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                query: `
+                    query {
+                        getReviewsForMentor(mentorEmail: "${mentorEmail}") {
+                            id
+                            rating
+                            comment
+                            mentee {
+                                firstName
+                                lastName
+                            }
+                        }
+                    }
+                `
+            }, { headers: { session: token } });
+            console.log(mentorEmail)
+            const reviews = response.data?.data?.getReviewsForMentor || [];
+            setReviews(reviews);
+            setReviewsOpen(true);
+            console.log(response.data.data)
+        } catch (err) {
+            console.error("Error fetching reviews:", err);
+            setError("Failed to fetch reviews.");
+        }
+    };
+
+    const handleCloseReviews = () => {
+        setReviewsOpen(false);
+        setReviews([]);
+    };
+
+    const handleOpenHideReviewDialog = (reviewId: string) => {
+        setSelectedReviewId(reviewId);
+        setHideReviewDialogOpen(true);
+    };
+
+    const handleCloseHideReviewDialog = () => {
+        setHideReviewDialogOpen(false);
+        setSelectedReviewId(null);
+    };
+
+    const handleHideReview = async () => {
+        if (!selectedReviewId) return;
+        try {
+            const response = await axios.post('http://127.0.0.1:8000/graphql/', {
+                query: `
+                    mutation {
+                        hideReview(reviewId: "${selectedReviewId}") {
+                            message
+                        }
+                    }
+                `
+            }, { headers: { session: token } });
+
+            console.log("Hide Review Response:", response.data);
+            handleCloseHideReviewDialog();
+            alert("Review hidden successfully!");
+            // Optionally, refetch reviews to update the list
+            if (selectedMentor) {
+                fetchReviews(selectedMentor.email);
+            }
+        } catch (err) {
+            console.error("Error hiding review:", err);
+            setError("Failed to hide the review.");
+        }
+    };
 
     return (
         <Box display="flex">
             {isAdmin ? <AdminSideBar /> : <SideBar />}
-            
             <Box flex={1} p={4}>
                 <Typography variant="h4" align="center" gutterBottom>
                     Mentors
@@ -190,97 +238,99 @@ const MentorsList: React.FC = () => {
                 {error && <Alert severity="error">{error}</Alert>}
 
                 {loading ? (
-                    <CircularProgress />
+                    <Box display="flex" justifyContent="center" alignItems="center" height="60vh">
+                        <CircularProgress />
+                    </Box>
                 ) : (
-                    <Stack direction="row" spacing={4} flexWrap="wrap" justifyContent="center">
+                    <Grid container spacing={4} justifyContent="left" marginTop={2} width="100%">
                         {mentors.map((mentor) => (
-                            <Box
-                                key={mentor.id}
-                                display="flex"
-                                flexDirection="column"
-                                alignItems="center"
-                                sx={{ cursor: 'pointer' }}
-                                onClick={() => handleOpenModal(mentor)}
-                            >
-                                <Avatar src={mentor.profilePicture} sx={{ width: 64, height: 64 }} />
-                                <Typography>{`${mentor.firstName} ${mentor.lastName}`}</Typography>
-                            </Box>
+                            <Grid item key={mentor.email} xs={12} sm={6} md={6} lg={6}>
+                                <Card
+                                    sx={{
+                                        height: '100%', display: 'flex', flexDirection: 'column',
+                                        borderRadius: 3, boxShadow: 3, transition: '0.3s',
+                                        '&:hover': { boxShadow: 6 }
+                                    }}
+                                >
+                                    <CardContent>
+                                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                                            <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', boxShadow: 2 }}>
+                                                {mentor.firstName[0]}{mentor.lastName[0]}
+                                            </Avatar>
+                                            <Chip
+                                                label={mentor.expertise}
+                                                color="secondary"
+                                                sx={{ fontSize: 12, px: 1.5 }}
+                                            />
+                                        </Box>
+                                        <Typography variant="h6" sx={{ mt: 2, fontWeight: 'bold' }}>
+                                            {`${mentor.firstName} ${mentor.lastName}`}
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary">
+                                            {mentor.occupation}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mt: 2, fontSize: '0.95rem' }}>
+                                            {mentor.bio}
+                                        </Typography>
+
+                                        <Box sx={{ mt: 2 }}>
+                                            <Typography variant="body2" color="textSecondary">
+                                                Average Rating:
+                                            </Typography>
+                                            <Rating
+                                                value={averageRatings[mentor.email] || 0}
+                                                readOnly
+                                                precision={0.5}
+                                                sx={{ color: '#1976d2' }}
+                                            />
+                                        </Box>
+                                    </CardContent>
+                                    <CardActions sx={{ justifyContent: 'center', mt: 'auto', pb: 2 }}>
+                                        <Button
+                                            size="small"
+                                            color="primary"
+                                            variant="contained"
+                                            sx={{
+                                                backgroundColor: '#1976d2', '&:hover': { backgroundColor: '#1565c0' },
+                                                borderRadius: 2, textTransform: 'none',
+                                                fontWeight: 'bold', px: 3, py: 1, mr: 2
+                                            }}
+                                            onClick={() => handleOpenBooking(mentor)}
+                                        >
+                                            Book Session
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            color="primary"
+                                            variant="outlined"
+                                            sx={{
+                                                borderRadius: 2, textTransform: 'none',
+                                                fontWeight: 'bold', px: 3, py: 1
+                                            }}
+                                            onClick={() => fetchReviews(mentor.email)}
+                                        >
+                                            View Reviews
+                                        </Button>
+                                    </CardActions>
+                                </Card>
+                            </Grid>
                         ))}
-                    </Stack>
+                    </Grid>
                 )}
-
             </Box>
-
-            <Dialog open={!!selectedMentor} onClose={handleCloseModal} fullWidth maxWidth="sm">
-                <DialogContent>
-                    {selectedMentor && (
-                        <Box display="flex" flexDirection="column" alignItems="center">
-                            <Avatar src={selectedMentor.profilePicture} sx={{ width: 80, height: 80, mb: 2 }} />
-                            <Typography variant="h6">{`${selectedMentor.firstName} ${selectedMentor.lastName}`}</Typography>
-                            <Typography variant="body2" color="textSecondary">{selectedMentor.email}</Typography>
-                            <Typography variant="body2"><strong>Occupation:</strong> {selectedMentor.occupation}</Typography>
-                            <Typography variant="body2"><strong>Expertise:</strong> {selectedMentor.expertise}</Typography>
-                            <Typography variant="body1" sx={{ mt: 2 }}>{selectedMentor.bio}</Typography>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions sx={{ justifyContent: "space-between", mb: 2 }}>
-                    <Button variant="outlined" color="primary" onClick={handleCloseModal}>Cancel</Button>
-                    <Button variant="contained" color="primary" onClick={handleOpenBooking}>Book Session</Button>
-                </DialogActions>
-            </Dialog>
 
             <Dialog open={bookingOpen} onClose={handleCloseBooking} fullWidth maxWidth="sm">
                 <DialogTitle>Book a Session</DialogTitle>
-                <DialogContent>
+                <DialogContent sx={{ py: 3 }}>
                     {selectedMentor && (
                         <Box>
-                            <Typography variant="subtitle1" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                                 Schedule a session with {selectedMentor.firstName} {selectedMentor.lastName}
                             </Typography>
-
                             <Stack spacing={3} sx={{ mt: 2 }}>
-                                <TextField
-                                    label="Date"
-                                    type="date"
-                                    value={bookingDetails.date}
-                                    onChange={(e) => handleBookingChange('date', e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    fullWidth
-                                />
-
-                                <TextField
-                                    label="Time"
-                                    type="time"
-                                    value={bookingDetails.time}
-                                    onChange={(e) => handleBookingChange('time', e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    fullWidth
-                                />
-
-                                <FormControl fullWidth>
-                                    <InputLabel id="duration-label">Session Duration</InputLabel>
-                                    <Select
-                                        labelId="duration-label"
-                                        value={bookingDetails.duration}
-                                        label="Session Duration"
-                                        onChange={(e) => handleBookingChange('duration', e.target.value)}
-                                    >
-                                        <MenuItem value={15}>15 minutes</MenuItem>
-                                        <MenuItem value={30}>30 minutes</MenuItem>
-                                        <MenuItem value={45}>45 minutes</MenuItem>
-                                        <MenuItem value={60}>60 minutes</MenuItem>
-                                    </Select>
-                                </FormControl>
-
-                                <TextField
-                                    label="Reason for Session"
-                                    multiline
-                                    rows={4}
-                                    value={bookingDetails.reason}
+                                <TextField label="Reason for Session" multiline rows={4} value={bookingDetails.reason}
                                     onChange={(e) => handleBookingChange('reason', e.target.value)}
-                                    fullWidth
-                                    placeholder="Briefly describe what you'd like to discuss in this session..."
+                                    fullWidth placeholder="Briefly describe what you'd like to discuss..."
                                 />
                             </Stack>
                         </Box>
@@ -288,13 +338,60 @@ const MentorsList: React.FC = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseBooking} variant="outlined">Cancel</Button>
-                    <Button
-                        onClick={handleSubmitBooking}
-                        variant="contained"
-                        color="primary"
-                        disabled={!bookingDetails.date || !bookingDetails.time || !bookingDetails.reason}
-                    >
+                    <Button onClick={handleSubmitBooking} variant="contained" color="primary"
+                        disabled={!bookingDetails.reason}>
                         Confirm Booking
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={reviewsOpen} onClose={handleCloseReviews} fullWidth maxWidth="sm">
+                <DialogTitle>Reviews</DialogTitle>
+                <DialogContent sx={{ py: 3 }}>
+                    {reviews.length > 0 ? (
+                        reviews.map((review) => (
+                            <Box key={review.id} sx={{ mb: 3 }}>
+                                <Typography variant="subtitle1" fontWeight="bold">
+                                    {review.mentee.firstName} {review.mentee.lastName}
+                                </Typography>
+                                <Rating value={review.rating} readOnly precision={0.5} sx={{ color: '#1976d2' }} />
+                                <Typography variant="body1" sx={{ mt: 1 }}>
+                                    {review.comment}
+                                </Typography>
+                                {isAdmin && (
+                                    <Button
+                                        variant="outlined"
+                                        color="error"
+                                        sx={{ mt: 1 }}
+                                        onClick={() => handleOpenHideReviewDialog(review.id)}
+                                    >
+                                        Hide Review
+                                    </Button>
+                                )}
+                            </Box>
+                        ))
+                    ) : (
+                        <Typography variant="body1" sx={{ fontStyle: 'italic' }}>
+                            No reviews available for this mentor.
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseReviews} variant="outlined">Close</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={hideReviewDialogOpen} onClose={handleCloseHideReviewDialog} fullWidth maxWidth="sm">
+                <DialogTitle>Hide Review</DialogTitle>
+                <DialogContent sx={{ py: 3 }}>
+                    <Typography variant="body1">
+                        Are you sure you want to hide this review?
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseHideReviewDialog} variant="outlined">Cancel</Button>
+                    <Button onClick={handleHideReview} variant="contained" color="error">
+                        Hide
                     </Button>
                 </DialogActions>
             </Dialog>
