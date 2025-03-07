@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Container, TextField, Button, Typography, Grid, Box, Divider, Link, Avatar } from '@mui/material';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import {
+    Container, TextField, Button, Typography, Grid, Box, Divider, Link, Alert
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
 const CreateAccount: React.FC = () => {
@@ -27,6 +28,8 @@ const CreateAccount: React.FC = () => {
         expertise: '',
         bio: ''
     });
+
+    const [backendMessage, setBackendMessage] = useState<{ type: 'success' | 'error', message: string | string[] } | null>(null);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -160,11 +163,33 @@ const CreateAccount: React.FC = () => {
 
         try {
             const response = await axios.post('http://127.0.0.1:8000/graphql/', mutation);
-            console.log('Account created successfully:', response.data);
-            navigate('/login');
-            // Handle success, e.g., redirect to login page or show a success message
+            console.log('Backend Response:', response.data);
+
+            // Check for errors in the response, even if the status code is 200
+            if (response.data.errors) {
+                const errorMessages = response.data.errors.map((err: any) => err.message);
+                setBackendMessage({ type: 'error', message: errorMessages });
+            } else if (response.data.data?.createUser?.message) {
+                // Success message from the backend
+                setBackendMessage({ type: 'success', message: response.data.data.createUser.message });
+
+                // Redirect to login after a short delay
+                setTimeout(() => {
+                    navigate('/login');
+                }, 2000);
+            } else {
+                // Fallback for unexpected responses
+                setBackendMessage({ type: 'error', message: 'An unexpected response was received from the server.' });
+            }
         } catch (error) {
             console.error('Error creating account:', error.response ? error.response.data : error.message);
+
+            // Handle network errors or server errors (e.g., 500)
+            const errorMessages = error.response?.data?.errors?.map((err: any) => err.message) || ['An error occurred while creating the account.'];
+            setBackendMessage({
+                type: 'error',
+                message: errorMessages
+            });
         }
     };
 
@@ -180,6 +205,22 @@ const CreateAccount: React.FC = () => {
                 <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
                     Create Account
                 </Typography>
+
+                {/* Display backend messages */}
+                {backendMessage && (
+                    <Alert severity={backendMessage.type} sx={{ mb: 2 }}>
+                        {Array.isArray(backendMessage.message) ? (
+                            <ul>
+                                {backendMessage.message.map((msg, index) => (
+                                    <li key={index}>{msg}</li>
+                                ))}
+                            </ul>
+                        ) : (
+                            backendMessage.message
+                        )}
+                    </Alert>
+                )}
+
                 <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                         <Typography variant="subtitle1">Firstname <span style={{ color: "red" }}>*</span></Typography>

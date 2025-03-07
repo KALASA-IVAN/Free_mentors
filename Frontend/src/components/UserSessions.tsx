@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import SideBar from '../constants/SideBar';
-import { IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Typography, CircularProgress, Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Rating } from '@mui/material';
+import {
+    IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Typography,
+    CircularProgress, Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Rating
+} from '@mui/material';
 
 interface Session {
     id: number;
@@ -12,6 +15,7 @@ interface Session {
     status: 'Pending' | 'Accepted' | 'Rejected';
     topic: string;
 }
+
 const token = localStorage.getItem("token");
 
 const UserSessions: React.FC = () => {
@@ -22,6 +26,7 @@ const UserSessions: React.FC = () => {
     const [rating, setRating] = useState<number | null>(3);
     const [comment, setComment] = useState<string>("");
     const [openDialog, setOpenDialog] = useState(false);
+
     useEffect(() => {
         const fetchSessions = async () => {
             try {
@@ -45,6 +50,7 @@ const UserSessions: React.FC = () => {
                     }
                 });
                 setSessions(response.data?.data?.getUserMentorshipSessions || []);
+                console.log(response.data?.data?.getUserMentorshipSessions);
             } catch (err) {
                 setError("Failed to load mentorship sessions.");
             } finally {
@@ -86,6 +92,7 @@ const UserSessions: React.FC = () => {
             setError("Failed to submit review.");
         }
     };
+
     return (
         <Box display="flex">
             <SideBar />
@@ -96,6 +103,10 @@ const UserSessions: React.FC = () => {
 
                 {loading ? (
                     <CircularProgress />
+                ) : sessions.length === 0 ? (
+                    <Typography variant="body1" sx={{ fontStyle: 'italic', mt: 4 }}>
+                        No mentorship sessions found.
+                    </Typography>
                 ) : (
                     <TableContainer component={Paper} sx={{ mt: 4 }}>
                         <Table>
@@ -116,7 +127,7 @@ const UserSessions: React.FC = () => {
                                         <TableCell>{session.status}</TableCell>
                                         <TableCell>{session.topic}</TableCell>
                                         <TableCell>
-                                            {session.status === 'accepted' && (
+                                            {session.status === 'Accepted' && (
                                                 <Button variant="contained" color="primary" onClick={() => handleOpenDialog(session.id)}>
                                                     Leave a Review
                                                 </Button>
