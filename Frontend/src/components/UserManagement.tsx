@@ -1,26 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import SideBar from '../constants/SideBar';
+import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Typography, CircularProgress, Alert, Button } from '@mui/material';
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import AdminsSidebar from '../constants/AdminsSidebar';
-
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 interface User {
     id: number;
     firstName: string;
     lastName: string;
     email: string;
-    role: string; // 'user' or 'mentor'
-    isMentor: boolean; // Boolean field to determine if a user is a mentor
+    role: string;
+    isMentor: boolean;
 }
 
 const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
 
-    // Fetch users from backend
     useEffect(() => {
         const fetchUsers = async () => {
             try {
@@ -32,6 +31,7 @@ const UserManagement: React.FC = () => {
                              lastName
                              email
                              isMentor
+                             isAdmin
                              bio
                              occupation
                              expertise
@@ -39,13 +39,15 @@ const UserManagement: React.FC = () => {
                          }
                     `
                 });
-                console.log(response)
+                console.log(response.data);
                 const fetchedUsers = response.data?.data?.allUsers || [];
-                
+    
+                // Update role assignment logic
                 const updatedUsers = fetchedUsers.map((user: User) => ({
                     ...user,
-                    role: user.isMentor ? 'mentor' : 'mentee'
+                    role: user.isAdmin ? 'admin' : user.isMentor ? 'mentor' : 'mentee'
                 }));
+    
                 setUsers(updatedUsers);
             } catch (err) {
                 setError("Failed to load users.");
@@ -53,69 +55,45 @@ const UserManagement: React.FC = () => {
                 setLoading(false);
             }
         };
-
+    
         fetchUsers();
     }, []);
+    
 
-    // Handle Change to Mentor
-    const handleChangeToMentor = async (email: string) => {
+    const handleConfirmChangeToMentor = (email: string) => {
+        setSelectedUserEmail(email);
+        setConfirmOpen(true);
+    };
+
+    const handleChangeToMentor = async () => {
+        if (!selectedUserEmail) return;
         try {
             const token = localStorage.getItem("token");
-            console.log("Retrieved Token:", token);
-            
             if (!token) {
                 setError("No authentication token found.");
                 return;
             }
-            const response = await axios.post(
+            await axios.post(
                 'http://127.0.0.1:8000/graphql/',
                 {
                     query: `
                         mutation {
-                            changeUserToMentor(email: "${email}") {
+                            changeUserToMentor(email: "${selectedUserEmail}") {
                                 message
                             }
                         }
                     `
                 },
                 {
-                    headers: {
-                        session: token,  
-                    }
+                    headers: { session: token }
                 }
             );
-            
-    
-            console.log("Mentor Change Response:", response.data);
-    
-            setUsers(users.map(user => 
-                user.email === email ? { ...user, role: 'mentor' } : user
-            ));
+            setUsers(users.map(user => user.email === selectedUserEmail ? { ...user, role: 'mentor' } : user));
         } catch (err) {
-            console.error("Error changing user to mentor:", err);
             setError("Failed to update user role.");
-        }
-    };
-    
-    
-    
-    
-
-    // Handle Delete User
-    const handleDelete = async (id: number) => {
-        try {
-            await axios.post('http://127.0.0.1:8000/graphql/', {
-                query: `
-                    mutation {
-                        deleteUser(id: ${id}) {
-                            success
-                        }
-                    }
-                `
-            });
-            setUsers(users.filter(user => user.id !== id));
-        } catch (err) {
-            setError("Failed to delete user.");
+        } finally {
+            setConfirmOpen(false);
+            setSelectedUserEmail(null);
         }
     };
 
@@ -124,9 +102,7 @@ const UserManagement: React.FC = () => {
             <AdminsSidebar />
             <Box flexGrow={1} p={4}>
                 <Typography variant="h5" mb={2}>User Management</Typography>
-
                 {error && <Alert severity="error">{error}</Alert>}
-
                 {loading ? (
                     <CircularProgress />
                 ) : (
@@ -134,41 +110,32 @@ const UserManagement: React.FC = () => {
                         <Table>
                             <TableHead sx={{ bgcolor: '#506FD6' }}>
                                 <TableRow>
-                                    <TableCell sx={{ color: 'white' }}>#</TableCell>
                                     <TableCell sx={{ color: 'white' }}>Names</TableCell>
                                     <TableCell sx={{ color: 'white' }}>Email</TableCell>
                                     <TableCell sx={{ color: 'white' }}>Role</TableCell>
-                                    <TableCell sx={{ color: 'white' }}>Actions</TableCell>
+                                    <TableCell sx={{ color: 'white' }}></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {users.map((user) => (
                                     <TableRow key={user.id}>
-                                        <TableCell>{user.id}</TableCell>
                                         <TableCell>{user.firstName} {user.lastName}</TableCell>
                                         <TableCell>{user.email}</TableCell>
-                                        <TableCell>{user.role}</TableCell>
+                                        <TableCell sx={{color: user.role === 'admin' ? 'red' : user.role === 'mentor' ? 'blue' : 'green',fontWeight: 'bold'}}>{user.role}</TableCell>
                                         <TableCell>
                                             {user.role === 'mentee' ? (
                                                 <Button
                                                     color="primary"
                                                     variant="outlined"
-                                                    onClick={() => handleChangeToMentor(user.email)}
+                                                    onClick={() => handleConfirmChangeToMentor(user.email)}
                                                 >
                                                     Make Mentor
                                                 </Button>
                                             ) : (
-                                                <Button
-                                                    color="secondary"
-                                                    variant="outlined"
-                                                    disabled
-                                                >
+                                                <Button color="secondary" variant="outlined" disabled>
                                                     Mentor
                                                 </Button>
                                             )}
-                                            <IconButton color="error" onClick={() => handleDelete(user.id)} sx={{ ml: 2 }}>
-                                                <DeleteIcon />
-                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -176,6 +143,26 @@ const UserManagement: React.FC = () => {
                         </Table>
                     </TableContainer>
                 )}
+
+                <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+                    <Box display="flex" flexDirection="column" alignItems="center" p={3}>
+                        <WarningAmberIcon color="warning" sx={{ fontSize: 50, mb: 2 }} />
+                        <DialogTitle sx={{ fontWeight: 'bold', textAlign: 'center' }}>Confirm Action</DialogTitle>
+                        <DialogContent>
+                            <DialogContentText sx={{ textAlign: 'center', fontSize: 16 }}>
+                                Are you sure you want to make this user a <strong>mentor</strong>?
+                            </DialogContentText>
+                        </DialogContent>
+                        <DialogActions sx={{ justifyContent: 'center', mt: 2 }}>
+                            <Button onClick={() => setConfirmOpen(false)} variant="outlined" color="secondary" sx={{ px: 3 }}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleChangeToMentor} variant="contained" color="primary" sx={{ px: 3, ml: 2 }}>
+                                Confirm
+                            </Button>
+                        </DialogActions>
+                    </Box>
+                </Dialog>
             </Box>
         </Box>
     );

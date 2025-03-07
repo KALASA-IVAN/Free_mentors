@@ -36,14 +36,15 @@ export const loginUser = createAsyncThunk(
             mutation {
                 loginUser(email: "${email}", password: "${password}") {
                     accessToken
-                    refreshToken
-                    user {
-                        firstName
-                        email
-                        isMentor
-                        isAdmin
-                    }
-                    message
+                     refreshToken
+                     user {
+                       firstName
+                       email
+                       isMentor
+                       isAdmin
+                     }
+                     message
+
                 }
             }
           `,
@@ -60,12 +61,15 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem("token", data.accessToken);
       localStorage.setItem("isMentor", String(data.user.isMentor));
       localStorage.setItem("isAdmin", String(data.user.isAdmin));
+      localStorage.setItem("firstName", String(data.user.firstName));
 
+      // console.log(data.user.firstName)
       return {
         token: data.accessToken,
         email,
         isMentor: data.user.isMentor,
         isAdmin: data.user.isAdmin,
+        firstName: data.user.firstName,
       };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || "Login failed");

@@ -182,7 +182,7 @@ const CreateAccount: React.FC = () => {
                 </Typography>
                 <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle1">Firstname</Typography>
+                        <Typography variant="subtitle1">Firstname <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -203,7 +203,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle1">Lastname</Typography>
+                        <Typography variant="subtitle1">Lastname <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -224,7 +224,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Email</Typography>
+                        <Typography variant="subtitle1">Email <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -245,7 +245,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Address</Typography>
+                        <Typography variant="subtitle1">Address <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -266,7 +266,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Password</Typography>
+                        <Typography variant="subtitle1">Password <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -288,7 +288,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Occupation</Typography>
+                        <Typography variant="subtitle1">Occupation <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -308,7 +308,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Expertise</Typography>
+                        <Typography variant="subtitle1">Expertise <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
@@ -328,7 +328,7 @@ const CreateAccount: React.FC = () => {
                         />
                     </Grid>
                     <Grid item xs={12}>
-                        <Typography variant="subtitle1">Bio</Typography>
+                        <Typography variant="subtitle1">Bio <span style={{ color: "red" }}>*</span></Typography>
                         <TextField
                             variant="outlined"
                             required
